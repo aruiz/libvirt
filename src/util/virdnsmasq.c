@@ -386,10 +386,9 @@ hostsfileWrite(const char *path,
                dnsmasqDhcpHost *hosts,
                unsigned int nhosts)
 {
-    char *tmp;
+    char *tmp, *content = NULL;
     FILE *f;
     bool istmp = true;
-    size_t i;
     int rc = 0;
 
     /* even if there are 0 hosts, create a 0 length file, to allow
@@ -407,17 +406,21 @@ hostsfileWrite(const char *path,
         }
     }
 
-    for (i = 0; i < nhosts; i++) {
-        if (fputs(hosts[i].host, f) == EOF || fputc('\n', f) == EOF) {
-            rc = -errno;
-            VIR_FORCE_FCLOSE(f);
-
-            if (istmp)
-                unlink(tmp);
-
-            goto cleanup;
-        }
+    if (!(content = dnsmasqDhcpHostsToString(hosts, nhosts))) {
+        rc = -ENOMEM;
+        goto cleanup;
     }
+
+    if (fputs(content, f) == EOF) {
+        rc = -errno;
+        VIR_FORCE_FCLOSE(f);
+
+        if (istmp)
+            unlink(tmp);
+
+        goto cleanup;
+     }
+
 
     if (VIR_FCLOSE(f) == EOF) {
         rc = -errno;
@@ -431,6 +434,7 @@ hostsfileWrite(const char *path,
     }
 
  cleanup:
+    VIR_FREE(content);
     VIR_FREE(tmp);
 
     return rc;
@@ -887,4 +891,32 @@ dnsmasqCapsGet(dnsmasqCapsPtr caps, dnsmasqCapsFlags flag)
 {
 
     return caps && virBitmapIsBitSet(caps->flags, flag);
+}
+
+/** dnsmasqDhcpHostsToString:
+ *
+ *   Turns a vector of dnsmasqDhcpHost into the string that is ought to be
+ *   stored in the hostsfile, this functionality is split to make hostsfiles
+ *   testable. Returs NULL if nhosts is 0.
+ */
+char *
+dnsmasqDhcpHostsToString (dnsmasqDhcpHost *hosts,
+                          unsigned int nhosts)
+{
+    int i;
+    char *result = NULL;
+    virBuffer hostsfilebuf = VIR_BUFFER_INITIALIZER;
+
+    if (nhosts == 0)
+       goto cleanup;
+
+    for (i = 0; i < nhosts; i++) {
+        virBufferAsprintf(&hostsfilebuf, "%s\n", hosts[i].host);
+    }
+
+    result = virBufferContentAndReset(&hostsfilebuf);
+
+cleanup:
+    virBufferFreeAndReset(&hostsfilebuf);
+    return result;
 }

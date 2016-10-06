@@ -1078,6 +1078,7 @@ int
 networkDnsmasqConfContents(virNetworkObjPtr network,
                            const char *pidfile,
                            char **configstr,
+                           char **hostsfilestr,
                            dnsmasqContext *dctx,
                            dnsmasqCapsPtr caps ATTRIBUTE_UNUSED)
 {
@@ -1460,6 +1461,15 @@ networkDnsmasqConfContents(virNetworkObjPtr network,
         if (networkBuildDnsmasqDhcpHostsList(dctx, ipdef) < 0)
             goto cleanup;
 
+        /* Return the contents of the hostsfile if requested */
+        if (hostsfilestr) {
+            *hostsfilestr = dnsmasqDhcpHostsToString (dctx->hostsfile->hosts,
+                                                      dctx->hostsfile->nhosts);
+
+            if (!hostsfilestr)
+                goto cleanup;
+        }
+
         /* Note: the following is IPv4 only */
         if (VIR_SOCKET_ADDR_IS_FAMILY(&ipdef->address, AF_INET)) {
             if (ipdef->nranges || ipdef->nhosts) {
@@ -1561,7 +1571,7 @@ networkBuildDhcpDaemonCommandLine(virNetworkDriverStatePtr driver,
 
     network->dnsmasqPid = -1;
 
-    if (networkDnsmasqConfContents(network, pidfile, &configstr,
+    if (networkDnsmasqConfContents(network, pidfile, &configstr, NULL,
                                    dctx, dnsmasq_caps) < 0)
         goto cleanup;
     if (!configstr)
