@@ -143,6 +143,13 @@ mymain(void)
     DO_TEST("dhcp6-nat-network", dhcpv6);
     DO_TEST("dhcp6host-routed-network", dhcpv6);
     DO_TEST("ptr-domains-auto", dhcpv6);
+    DO_TEST("leasetime", dhcpv6);
+    DO_TEST("leasetime-seconds", dhcpv6);
+    DO_TEST("leasetime-hours", dhcpv6);
+    DO_TEST("leasetime-minutes", dhcpv6);
+    DO_TEST("leasetime-hours", dhcpv6);
+    DO_TEST("leasetime-days", dhcpv6);
+    DO_TEST("leasetime-infinite", dhcpv6);
 
     virObjectUnref(dhcpv6);
     virObjectUnref(full);

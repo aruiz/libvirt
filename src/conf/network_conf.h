@@ -175,7 +175,8 @@ struct _virNetworkIPDef {
     char *tftproot;
     char *bootfile;
     virSocketAddr bootserver;
-   };
+    int64_t leasetime;
+};
 
 typedef struct _virNetworkForwardIfDef virNetworkForwardIfDef;
 typedef virNetworkForwardIfDef *virNetworkForwardIfDefPtr;

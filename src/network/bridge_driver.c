@@ -41,6 +41,8 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <dirent.h>
+#include <inttypes.h>
+#include <stdint.h>
 #if HAVE_SYS_SYSCTL_H
 # include <sys/sysctl.h>
 #endif
@@ -992,6 +994,40 @@ networkBuildDnsmasqHostsList(dnsmasqContext *dctx,
     return 0;
 }
 
+/* translates the leasetime value into a dnsmasq configuration string for dhcp-range/host */
+static char *
+networkDnsmasqConfLeaseValueToString (int64_t leasetime)
+{
+    char *result = NULL;
+    virBuffer leasebuf = VIR_BUFFER_INITIALIZER;
+
+    /* Leasetime parameter set on the XML */
+    /* Less than -1 means there was no value set */
+    if (leasetime < -1) {
+        virBufferAsprintf(&leasebuf, "%s", "");
+    }
+    /* -1 means no expiration */
+    else if (leasetime == -1)
+        virBufferAsprintf(&leasebuf, ",infinite");
+    /* Minimum expiry value is 120 */
+    /* TODO: Discuss if we should up as we do here or just forward whatever value to dnsmasq */
+    else if (leasetime < 120)
+        virBufferAsprintf(&leasebuf, ",120");
+    /* DHCP value for lease time is a unsigned four octect integer */
+    else if (leasetime <= UINT32_MAX)
+        virBufferAsprintf(&leasebuf, ",%" PRId64, leasetime);
+    /* TODO: Discuss the use of "deprecated" for ipv6*/
+    /* TODO: Discuss what is the default value that we want as dnsmasq's is 1 hour */
+    /* TODO: Discuss what to do if value exceeds maximum, use default value for now */
+    else {
+        virBufferAsprintf(&leasebuf, "%s", "");
+    }
+
+    result = virBufferContentAndReset(&leasebuf);
+    virBufferFreeAndReset (&leasebuf);
+
+    return result;
+}
 
 static int
 networkDnsmasqConfLocalPTRs(virBufferPtr buf,
@@ -1362,6 +1398,7 @@ networkDnsmasqConfContents(virNetworkObjPtr network,
         }
         for (r = 0; r < ipdef->nranges; r++) {
             int thisRange;
+            char *leasestr;
 
             if (!(saddr = virSocketAddrFormat(&ipdef->ranges[r].start)) ||
                 !(eaddr = virSocketAddrFormat(&ipdef->ranges[r].end)))
@@ -1369,12 +1406,22 @@ networkDnsmasqConfContents(virNetworkObjPtr network,
 
             virBufferAsprintf(&configbuf, "dhcp-range=%s,%s",
                               saddr, eaddr);
-            if (VIR_SOCKET_ADDR_IS_FAMILY(&ipdef->address, AF_INET6))
+
+            /* Add ipv6 prefix length parameter if needed */
+            if (ipdef == ipv6def)
                 virBufferAsprintf(&configbuf, ",%d", prefix);
+
+            leasestr = networkDnsmasqConfLeaseValueToString (ipdef->leasetime);
+            if (!leasestr)
+                goto cleanup;
+            virBufferAsprintf(&configbuf, "%s", leasestr);
+
+            /* Add the newline */
             virBufferAddLit(&configbuf, "\n");
 
             VIR_FREE(saddr);
             VIR_FREE(eaddr);
+            VIR_FREE(leasestr);
             thisRange = virSocketAddrGetRange(&ipdef->ranges[r].start,
                                               &ipdef->ranges[r].end,
                                               &ipdef->address,
