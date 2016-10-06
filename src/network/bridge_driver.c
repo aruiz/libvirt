@@ -950,30 +950,6 @@ networkKillDaemon(pid_t pid, const char *daemonName, const char *networkName)
     return ret;
 }
 
-/* the following does not build a file, it builds a list
- * which is later saved into a file
- */
-
-static int
-networkBuildDnsmasqDhcpHostsList(dnsmasqContext *dctx,
-                                 virNetworkIPDefPtr ipdef)
-{
-    size_t i;
-    bool ipv6 = false;
-
-    if (VIR_SOCKET_ADDR_IS_FAMILY(&ipdef->address, AF_INET6))
-        ipv6 = true;
-    for (i = 0; i < ipdef->nhosts; i++) {
-        virNetworkDHCPHostDefPtr host = &(ipdef->hosts[i]);
-        if (VIR_SOCKET_ADDR_VALID(&host->ip))
-            if (dnsmasqAddDhcpHost(dctx, host->mac, &host->ip,
-                                   host->name, host->id, ipv6) < 0)
-                return -1;
-    }
-
-    return 0;
-}
-
 static int
 networkBuildDnsmasqHostsList(dnsmasqContext *dctx,
                              virNetworkDNSDefPtr dnsdef)
@@ -1029,6 +1005,39 @@ networkDnsmasqConfLeaseValueToString (int64_t leasetime)
     return result;
 }
 
+/* the following does not build a file, it builds a list
+ * which is later saved into a file
+ */
+
+static int
+networkBuildDnsmasqDhcpHostsList(dnsmasqContext *dctx,
+                                 virNetworkIPDefPtr ipdef)
+{
+    int ret = -1;
+    size_t i;
+    bool ipv6 = false;
+    char *leasetime = networkDnsmasqConfLeaseValueToString(ipdef->leasetime);
+
+    if (!leasetime)
+        goto cleanup;
+
+    if (VIR_SOCKET_ADDR_IS_FAMILY(&ipdef->address, AF_INET6))
+        ipv6 = true;
+    for (i = 0; i < ipdef->nhosts; i++) {
+        virNetworkDHCPHostDefPtr host = &(ipdef->hosts[i]);
+        if (VIR_SOCKET_ADDR_VALID(&host->ip))
+            if (dnsmasqAddDhcpHost(dctx, host->mac, &host->ip,
+                                   host->name, host->id, leasetime, ipv6) < 0)
+                goto cleanup;
+    }
+
+    ret = 0;
+cleanup:
+    VIR_FREE(leasetime);
+    return ret;
+}
+
+
 static int
 networkDnsmasqConfLocalPTRs(virBufferPtr buf,
                             virNetworkDefPtr def)
@@ -1064,7 +1073,6 @@ networkDnsmasqConfLocalPTRs(virBufferPtr buf,
 
     return 0;
 }
-
 
 int
 networkDnsmasqConfContents(virNetworkObjPtr network,

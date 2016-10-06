@@ -88,6 +88,7 @@ int              dnsmasqAddDhcpHost(dnsmasqContext *ctx,
                                     virSocketAddr *ip,
                                     const char *name,
                                     const char *id,
+                                    const char *leastime,
                                     bool ipv6);
 int              dnsmasqAddHost(dnsmasqContext *ctx,
                                 virSocketAddr *ip,
